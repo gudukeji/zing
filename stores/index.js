@@ -21,7 +21,7 @@ pinia.use(({ store }) => {
     app: ['theme']
   }
 
-  // 防抖保存函数
+  // 为每个store创建独立的定时器
   let saveTimer = null
   const debouncedSave = (storeId, data) => {
     if (saveTimer) clearTimeout(saveTimer)

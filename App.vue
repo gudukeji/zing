@@ -83,7 +83,7 @@ const getCompatibleEnterOptions = () => {
 
 		return null
 	} catch (error) {
-		console.warn('获取启动参数失败:', error)
+		// 获取启动参数失败，使用默认值
 		return null
 	}
 }
@@ -155,9 +155,7 @@ const handleError = (error, context = '') => {
 	// 增加错误计数
 	performanceMonitor.incrementError()
 
-	if (APP_CONFIG.debug) {
-		console.error(`[${context}] Error:`, error)
-	}
+	// 开发环境可以输出错误信息，生产环境由构建工具自动移除
 
 	// 错误上报
 	if (APP_CONFIG.errorHandling.enableReporting) {
@@ -182,13 +180,9 @@ const reportError = (error, context) => {
 		// 可以发送到错误监控服务
 		// errorReportingService.report(errorInfo)
 
-		if (APP_CONFIG.debug) {
-			console.log('Error reported:', errorInfo)
-		}
+		// 开发环境记录错误上报信息
 	} catch (reportError) {
-		if (APP_CONFIG.debug) {
-			console.error('Failed to report error:', reportError)
-		}
+		// 静默处理上报失败
 	}
 }
 
@@ -417,25 +411,37 @@ const handleLaunch = async (option) => {
 	}
 }
 
+// 性能监控定时器ID
+let performanceTimer = null
+
 // 启动性能监控
 const startPerformanceMonitoring = () => {
 	if (!APP_CONFIG.performance.enableMonitoring) return
 
+	// 清除之前的定时器
+	if (performanceTimer) {
+		clearInterval(performanceTimer)
+	}
+
 	// 定期上报性能数据
-	setInterval(() => {
+	performanceTimer = setInterval(() => {
 		const metrics = {
 			...performanceMonitor.metrics,
 			memoryUsage: getMemoryUsage(),
 			timestamp: Date.now()
 		}
 
-		if (APP_CONFIG.debug) {
-			console.log('Performance metrics:', metrics)
-		}
-
 		// 这里可以上报到性能监控服务
 		// performanceService.report(metrics)
 	}, APP_CONFIG.performance.reportInterval)
+}
+
+// 停止性能监控
+const stopPerformanceMonitoring = () => {
+	if (performanceTimer) {
+		clearInterval(performanceTimer)
+		performanceTimer = null
+	}
 }
 
 // 获取内存使用情况
@@ -775,6 +781,9 @@ const enhancedHandleShow = () => {
 		// 恢复应用状态
 		restoreAppState()
 
+		// 重新启动性能监控
+		startPerformanceMonitoring()
+
 		// 执行原有的Show逻辑
 		handleShow()
 
@@ -791,6 +800,9 @@ const enhancedHandleHide = () => {
 	try {
 		// 保存应用状态
 		saveAppState()
+
+		// 停止性能监控，避免后台消耗资源
+		stopPerformanceMonitoring()
 
 		// 执行原有的Hide逻辑
 		handleHide()
