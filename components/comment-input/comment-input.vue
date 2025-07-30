@@ -142,11 +142,23 @@ const emojiMap = reactive({})
 const phraseMap = reactive({})
 const reverseMap = reactive({})
 
-// 定时器
+// 定时器管理
 const inputDebounceTimer = ref(null)
 const retryTimer = ref(null)
 const retryCount = ref(0)
 const observer = ref(null)
+
+// 定时器清理函数
+const clearAllTimers = () => {
+  if (inputDebounceTimer.value) {
+    clearTimeout(inputDebounceTimer.value)
+    inputDebounceTimer.value = null
+  }
+  if (retryTimer.value) {
+    clearTimeout(retryTimer.value)
+    retryTimer.value = null
+  }
+}
 
 // 引用
 const atUserPopup = ref(null)
@@ -1209,15 +1221,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  // 清理定时器
-  if (inputDebounceTimer.value) {
-    clearTimeout(inputDebounceTimer.value)
-    inputDebounceTimer.value = null
-  }
-  if (retryTimer.value) {
-    clearTimeout(retryTimer.value)
-    retryTimer.value = null
-  }
+  // 清理所有定时器
+  clearAllTimers()
 
   // 清理MutationObserver
   if (observer.value) {

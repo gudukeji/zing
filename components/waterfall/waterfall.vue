@@ -231,9 +231,9 @@ export default {
           this.isNoteVideo = app.globalData.isNoteVideo !== undefined ? app.globalData.isNoteVideo : true
         }
       }
-    } catch (e) {
-      console.log('获取配置失败', e)
-    }
+          } catch (e) {
+        // 获取配置失败，使用默认值
+      }
   },
   watch: {
     note: {
@@ -250,7 +250,7 @@ export default {
 
         this.layoutTimer = setTimeout(() => {
           this.handleNoteChange(newVal, oldVal);
-        }, 100);
+        }, 150); // 增加防抖时间，减少布局频率
       },
       immediate: false,
       deep: false // 不需要深度监听，只监听数组引用变化
@@ -309,7 +309,6 @@ export default {
         this.performanceMetrics.lastUpdate = Date.now();
 
       } catch (error) {
-        console.error('瀑布流布局处理失败:', error);
         this.handleLayoutError(error);
       }
     },
@@ -327,9 +326,11 @@ export default {
 
     // 处理布局错误
     handleLayoutError(error) {
-      console.error('瀑布流布局错误:', error);
       // 重置为安全状态
       this.clearLayout();
+      
+      // 触发错误事件供父组件处理
+      this.$emit('layout-error', error);
     },
 
     // 获取缓存的布局信息
@@ -517,8 +518,10 @@ export default {
       const processTime = Date.now() - startTime;
       this.performanceMetrics.layoutTime = processTime;
 
-      if (processTime > 100) {
-        console.warn('瀑布流布局计算较慢:', processTime + 'ms');
+      // 性能监控：开发环境记录性能指标
+      if (processTime > 200) {
+        // 触发性能优化
+        this.optimizePerformance();
       }
     },
 
@@ -587,6 +590,35 @@ export default {
     updateRenderCounts() {
       this.renderLeftItems = Math.min(this.leftList.length, this.maxRenderItems);
       this.renderRightItems = Math.min(this.rightList.length, this.maxRenderItems);
+    },
+
+    // 性能优化方法
+    optimizePerformance() {
+      // 减少渲染项目数量
+      if (this.maxRenderItems > 10) {
+        this.maxRenderItems = Math.max(10, this.maxRenderItems - 5);
+        this.updateRenderCounts();
+      }
+
+      // 增加批处理大小，减少渲染次数
+      this.batchSize = Math.min(20, this.batchSize + 2);
+
+      // 清理部分缓存以释放内存
+      if (this.layoutCache.size > 100) {
+        const keysToDelete = Array.from(this.layoutCache.keys()).slice(0, 50);
+        keysToDelete.forEach(key => this.layoutCache.delete(key));
+      }
+
+      // 延迟非关键渲染
+      if (this.layoutTimer) {
+        clearTimeout(this.layoutTimer);
+      }
+      this.layoutTimer = setTimeout(() => {
+        // 批量更新DOM
+        this.$nextTick(() => {
+          this.updateRenderCounts();
+        });
+      }, 100);
     },
 
     // 计算项目布局
@@ -879,7 +911,27 @@ export default {
       }
       
       return '用户';
+    },
+
+    // 清理所有定时器
+    clearAllTimers() {
+      if (this.layoutTimer) {
+        clearTimeout(this.layoutTimer);
+        this.layoutTimer = null;
+      }
     }
+  },
+
+  // 组件销毁前清理
+  beforeDestroy() {
+    this.clearAllTimers();
+    this.clearLayout();
+  },
+
+  // Vue 3 兼容
+  beforeUnmount() {
+    this.clearAllTimers();
+    this.clearLayout();
   }
 }
 </script>
