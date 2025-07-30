@@ -300,6 +300,7 @@ import { mapGetters } from "vuex"
 import { useUserStore } from '@/stores/user.js'
 import { useAppStore } from '@/stores/app.js'
 import { useSocialStore } from '@/stores/social.js'
+import DataTransformer from '@/utils/dataTransformer.js'
 
 export default {
   components: {
@@ -613,7 +614,7 @@ export default {
       try {
         // 异步获取侧边栏菜单（优化：使用缓存）
         this.getSidebarMenu().catch(err => {
-          console.log('获取侧边栏菜单失败:', err);
+          // 侧边栏菜单加载失败，使用默认菜单
         });
 
         if (!this.isLogin) {
@@ -629,8 +630,7 @@ export default {
         ]);
 
       } catch (error) {
-        console.error('页面初始化失败:', error);
-        this.showErrorToast('页面加载失败，请稍后重试');
+        this.handleInitializationError(error);
       } finally {
         // 异步记录访问
         this.$nextTick(() => {
@@ -639,9 +639,13 @@ export default {
       }
     },
 
-    // 错误处理方法
+    // 页面初始化错误处理
+    handleInitializationError(error) {
+      this.showErrorToast('页面加载失败，请稍后重试');
+    },
+
+    // 用户信息加载错误处理方法
     handleUserInfoError(error) {
-      console.error('用户信息加载失败:', error);
       // 用户信息加载失败时的降级处理
       if (!this.userInfo.nickname || this.userInfo.nickname === "您还未登录哦~") {
         this.userInfo.nickname = "加载失败";
@@ -830,7 +834,7 @@ export default {
       if (!this.isLogin) {
         const errorMsg = '未登录';
         if (!silent) {
-          console.log('用户未登录，跳过获取用户信息');
+          // 用户未登录，跳过获取用户信息
         }
         return Promise.reject(new Error(errorMsg));
       }
@@ -853,32 +857,35 @@ export default {
         this.lastRefreshTime = Date.now();
 
         if (res.status === 200 || res.code === 200) {
-          const socialData = res.data;
+          // 使用DataTransformer标准化用户数据
+          const standardizedUserData = DataTransformer.transformUserInfo(res.data);
+          
+          if (standardizedUserData) {
+            // 添加格式化的点赞数显示
+            standardizedUserData.like_count_str = standardizedUserData.likeCount > 999 ?
+              (standardizedUserData.likeCount/1000).toFixed(1) + 'k' :
+              standardizedUserData.likeCount.toString();
 
-          // 数据处理
-          if (socialData.like_count !== undefined) {
-            socialData.like_count_str = socialData.like_count > 999 ?
-              (socialData.like_count/1000).toFixed(1) + 'k' :
-              socialData.like_count.toString();
+            // 确保uid存在
+            if (!standardizedUserData.uid && this.$store.state.app.userInfo?.uid) {
+              standardizedUserData.uid = this.$store.state.app.userInfo.uid;
+            }
+
+            // 更新用户信息 - 使用标准化后的数据
+            this.userInfo = {...this.userInfo, ...standardizedUserData};
+            this.$store.commit("UPDATE_USERINFO", standardizedUserData);
+            this.userClick();
+
+            // 更新消息数量（从原始数据获取，因为这个字段还未标准化）
+            if (res.data.service_num !== undefined) {
+              this.currentMsg = res.data.service_num;
+            }
+
+            // 重置重试计数
+            this.retryConfig.currentRetries.userInfo = 0;
+
+            return standardizedUserData;
           }
-
-          if (!socialData.uid && this.$store.state.app.userInfo?.uid) {
-            socialData.uid = this.$store.state.app.userInfo.uid;
-          }
-
-          // 更新用户信息
-          this.userInfo = {...this.userInfo, ...socialData};
-          this.$store.commit("UPDATE_USERINFO", socialData);
-          this.userClick();
-
-          if (socialData.service_num !== undefined) {
-            this.currentMsg = socialData.service_num;
-          }
-
-          // 重置重试计数
-          this.retryConfig.currentRetries.userInfo = 0;
-
-          return socialData;
         } else {
           throw new Error(res.msg || '获取用户信息失败');
         }
@@ -891,7 +898,7 @@ export default {
 
         // 重试机制
         if (retryCount < this.retryConfig.maxRetries && !silent) {
-          console.log(`用户信息获取失败，正在重试 ${retryCount + 1}/${this.retryConfig.maxRetries}`);
+          // 用户信息获取失败，正在重试
 
           await new Promise(resolve =>
             setTimeout(resolve, this.retryConfig.retryDelay * (retryCount + 1))
@@ -995,18 +1002,19 @@ export default {
       }
     },
 
-    // 优化：统一的列表数据更新
+    // 优化：统一的列表数据更新，使用标准化数据转换
     updateListData(data, isRefresh) {
-      if (data.list && data.list.length > 0) {
+      // 使用DataTransformer标准化列表数据
+      const transformedData = DataTransformer.transformListResponse(data, DataTransformer.transformNoteInfo);
+      
+      if (transformedData.list && transformedData.list.length > 0) {
         if (this.page == 1 || isRefresh) {
-          this.list = data.list;
+          this.list = transformedData.list;
         } else {
-          this.list.push(...data.list);
+          this.list.push(...transformedData.list);
         }
 
-        if (data.count !== undefined) {
-          this.totalCount = data.count;
-        }
+        this.totalCount = transformedData.totalCount;
         this.isEmpty = false;
       } else if (this.page == 1) {
         this.isEmpty = true;
@@ -1039,7 +1047,7 @@ export default {
 
       // 重试机制
       if (retryCount < this.retryConfig.maxRetries && !silent) {
-        console.log(`数据获取失败，正在重试 ${retryCount + 1}/${this.retryConfig.maxRetries}`);
+        // 数据获取失败，正在重试
 
         await new Promise(resolve =>
           setTimeout(resolve, this.retryConfig.retryDelay * (retryCount + 1))

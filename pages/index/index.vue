@@ -294,11 +294,11 @@ const onSignIn = () => {
 
 // 滚动到底部时触发
 const onReachEnd = () => {
-  console.log('滚动到底部');
+  // 滚动到底部，可以加载更多数据
 }
 
-// 从store获取消息数量
-const getCurrentMsg = () => {
+// 获取当前消息数量
+const getCurrentMessageCount = () => {
   if (store && store.state && store.state.app) {
     const userInfo = uni.getStorageSync('USER_INFO') || {};
     currentMsg.value = userInfo.service_num || 0;
@@ -317,7 +317,6 @@ const navigateToFun = (e) => {
 
 // 导航到特定功能
 const navigateToFeature = (type) => {
-  console.log('Navigate to feature:', type);
   // 根据type跳转到不同的页面
   let url = '';
   switch (type) {
